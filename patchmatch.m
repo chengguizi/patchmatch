@@ -5,9 +5,11 @@
 clear; close all;
 
 A = double(imread('imageA.jpg')); % source
+%A = imresize(A,0.5);
 B = double(imread('imageB.jpg')); % target / to be reconstructed
+%B = imresize(B,0.5);
 
-p_size=9; % must be odd, patch size
+p_size=5; % must be odd, patch size
 hp_size=(p_size-1)/2;
 num_pass = 4;
 
@@ -17,8 +19,13 @@ num_pass = 4;
 radius0 = max(row_A,column_A)/2;
 alpha = 0.5;
 
-%% memory declaration
+% regeneration patch
+regen_p_size = 5; % should be smaller than p_size
+regen_hp_size = (regen_p_size-1)/2;
+patch_construct = false;
 
+%% memory declaration
+tic
 % create a padded version of B (target)
 % non-active region is marked as NAN, hence excluded from SSD calculation
 % later on
@@ -45,6 +52,7 @@ for i= 1:row_B
 end
 
 %% iteration steps
+visualise_correspondance_vectors(NNF,B,A,0,p_size);
 for pass = 1:num_pass
     %% even/odd logic
     if mod(pass,2) ~= 0 % is odd
@@ -142,8 +150,12 @@ for pass = 1:num_pass
             reconstruct_B(i,j,:) = A(NNF(i,j,1),NNF(i,j,2),:);
         end
     end
-    
+    figure(1);
     imshow(uint8(reconstruct_B));
+    
+    % debug
+    visualise_correspondance_vectors(NNF,B,A,pass,p_size);
+    
     drawnow
     
     
@@ -152,14 +164,19 @@ end % end for pass
 
 %% reconstruction
 
-patch_construct = false;
+td = toc;
+
+fprintf('time elapsed: %.2f s\n',td);
 
 reconstruct_B = zeros(size(B));
 
 if patch_construct
-    for i=1+hp_size:p_size:row_B-hp_size
-        for j=1+hp_size:p_size:column_B-hp_size
-            reconstruct_B(i-hp_size:i+hp_size,j-hp_size:j+hp_size,:) = A(NNF(i,j,1)-hp_size:NNF(i,j,1)+hp_size,NNF(i,j,2)-hp_size:NNF(i,j,2)+hp_size,:);
+    for i=1+regen_hp_size:regen_p_size:row_B
+        for j=1+regen_hp_size:regen_p_size:column_B
+            trim_i = max (i+regen_hp_size - row_B,0);
+            trim_j = max (j+regen_hp_size - column_B,0);
+            reconstruct_B( i-regen_hp_size:i+regen_hp_size-trim_i ,j-regen_hp_size: j+regen_hp_size-trim_j,:) ...
+                = A( NNF(i,j,1)-regen_hp_size:NNF(i,j,1)+regen_hp_size-trim_i , NNF(i,j,2)-regen_hp_size:NNF(i,j,2)+regen_hp_size-trim_j,:);
         end
     end
 else
@@ -169,8 +186,8 @@ else
         end
     end
 end
-reconstruct_B = uint8(reconstruct_B);
-imshow(uint8(reconstruct_B));
-drawnow
+reconstruct_B_uint8 = uint8(reconstruct_B);
+figure(1);
+imshow(reconstruct_B_uint8);
 
-imwrite(reconstruct_B,'reconstructed.png');
+imwrite(reconstruct_B_uint8,'reconstructed.png');
